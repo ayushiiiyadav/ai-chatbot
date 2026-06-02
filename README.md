@@ -12,6 +12,5 @@ AI Chatbot is a conversational application designed to interact with users in na
 ## Technologies Used
 - Git & GitHub for version control
 
-
 ## Purpose
 The goal of this project is to explore conversational AI and build a chatbot capable of assisting users with information, answering questions, and performing basic tasks.
