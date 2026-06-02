@@ -1,5 +1,4 @@
 # AI Chatbot
-
 AI Chatbot is a conversational application designed to interact with users in natural language. The project aims to provide intelligent, context-aware responses, making communication with the system simple and user-friendly.
 
 ## Features
