@@ -11,13 +11,10 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 st.set_page_config(
     page_title="Nova AI",
     page_icon="✦",
-    layout="wide",                    # KEY FIX — wide kills the side gutter columns
+    layout="wide",                   
     initial_sidebar_state="collapsed",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  STYLES + CANVAS
-# ─────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Sans:wght@300;400;500&display=swap');
@@ -123,11 +120,9 @@ header,
 </script>
 """, unsafe_allow_html=True)
 
-# ── SESSION STATE ─────────────────────────────────────────────────────────────
 if "messages"  not in st.session_state: st.session_state.messages  = []
 if "history"   not in st.session_state: st.session_state.history   = []
 
-# ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### ✦ Settings")
     st.markdown("---")
@@ -183,7 +178,6 @@ with st.sidebar:
     n = len(st.session_state.messages)
     st.markdown(f"<p>{n} message{'s' if n!=1 else ''}</p>", unsafe_allow_html=True)
 
-# ── HEADER ────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <div class="nova-header">
   <div class="nova-logo">✦ {bot_name}</div>
@@ -192,7 +186,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ── EMPTY STATE ───────────────────────────────────────────────────────────────
 if not st.session_state.messages:
     st.markdown("""
     <div class="empty-state">
@@ -201,12 +194,10 @@ if not st.session_state.messages:
     </div>
     """, unsafe_allow_html=True)
 
-# ── MESSAGES ──────────────────────────────────────────────────────────────────
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# ── INPUT ─────────────────────────────────────────────────────────────────────
 if prompt := st.chat_input("Send a message…"):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
