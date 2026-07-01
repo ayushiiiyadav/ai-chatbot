@@ -4,9 +4,52 @@ import os
 import time
 from dotenv import load_dotenv
 from datetime import datetime
+import io
+from pypdf import PdfReader
+import chromadb
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+@st.cache_resource
+def load_embedder():
+    return SentenceTransformer("all-MiniLM-L6-v2")
+
+embedder = load_embedder()
+
+def extract_text(uploaded_file):
+    if uploaded_file.type == "application/pdf":
+        reader = PdfReader(io.BytesIO(uploaded_file.read()))
+        return "\n".join(page.extract_text() or "" for page in reader.pages)
+    else:
+        return uploaded_file.read().decode("utf-8")
+    
+def chunk_text(text, chunk_size=400, overlap=50):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words),chunk_size - overlap):
+        chunk = " ".join(words[i:i + chunk_size])
+        if chunk.strip():
+            chunks.append(chunk)
+    return chunks 
+
+def build_vector_store(chunks):
+    chroma_client = chromadb.Client()
+    collection = chroma_client.get_or_create_collection(
+        name = f"nova_rag_{int(time.time())}"
+    )
+    collection.add(
+        documents=chunks,
+        ids=[f"chunk_{i}" for i in range(len(chunks))],
+        embeddings=embedder.encode(chunks).tolist(),
+    )
+    return collection
+
+def retrieve_context(query, collection, top_k=3):
+    query_emb = embedder.encode([query]).tolist()
+    results = collection.query(query_embeddings=query_emb, n_results=top_k)
+    return "\n\n".join(results["documents"][0])
 
 st.set_page_config(
     page_title="Nova AI",
@@ -175,6 +218,22 @@ with st.sidebar:
                 st.rerun()
 
     st.markdown("---")
+    st.markdown("### ✦ Knowledge (RAG)")
+    uploaded_file = st.file_uploader("Upload a document", type=["pdf", "txt"])
+
+    if uploaded_file:
+        if st.session_state.get("rag_file_name") != uploaded_file.name:
+            with st.spinner("Indexing document..."):
+                text = extract_text(uploaded_file)
+                chunks = chunk_text(text)
+                st.session_state.rag_collection = build_vector_store(chunks)
+                st.session_state.rag_file_name = uploaded_file.name
+            st.success(f"Indexed {len(chunks)} chunks from {uploaded_file.name}")
+    else:
+        st.session_state.pop("rag_collection", None)
+        st.session_state.pop("rag_file_name", None)            
+
+    st.markdown("---")
     n = len(st.session_state.messages)
     st.markdown(f"<p>{n} message{'s' if n!=1 else ''}</p>", unsafe_allow_html=True)
 
@@ -186,6 +245,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if "rag_file_name" in st.session_state:
+    st.markdown(
+        f"<p style='text-align:center;color:var(--accent);font-size:.75rem;'>"
+        f"📄 Answering from: {st.session_state.rag_file_name}</p>",
+        unsafe_allow_html=True,
+    )
+    
 if not st.session_state.messages:
     st.markdown("""
     <div class="empty-state">
@@ -205,13 +271,24 @@ if prompt := st.chat_input("Send a message…"):
 
     with st.chat_message("assistant"):
         with st.spinner(""):
+            api_messages = [{"role": "system", "content": system_prompt}]
+
+            if "rag_collection" in st.session_state:
+                context = retrieve_context(prompt, st.session_state.rag_collection)
+                rag_instruction = (
+                    "Use the following document excerpts to answer the user's "
+                    "question. If the answer isn't in the excerpts, say so honestly "
+                    "instead of guessing.\n\n"
+                    f"DOCUMENT EXCERPTS:\n{context}"
+                )
+                api_messages.append({"role": "system", "content": rag_instruction})
+
+            api_messages.extend(st.session_state.messages)
+
             response = client.chat.completions.create(
                 model=model_choice,
                 temperature=temperature,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *st.session_state.messages,
-                ],
+                messages=api_messages,
             )
             reply = response.choices[0].message.content
 
